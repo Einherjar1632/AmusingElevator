@@ -303,10 +303,15 @@ function App(): React.JSX.Element {
     }
 
     if (currentFloor === targetFloor) {
+      const isMissionSuccess = mode === 'mission' && targetFloor === missionFloor;
       setQueue((prev) => prev.slice(1));
       setDirection('stop');
       directionRef.current = 'stop';
-      setMessage(`${targetFloor}かいに とうちゃく。`);
+      if (isMissionSuccess) {
+        setMessage(`せいかい！ ${targetFloor}かいに とうちゃく。`);
+      } else {
+        setMessage(`${targetFloor}かいに とうちゃく。`);
+      }
       playSound('signal2');
       void (async () => {
         await delay(ARRIVAL_TO_OPEN_ANNOUNCE_MS);
@@ -315,16 +320,24 @@ function App(): React.JSX.Element {
         await delay(OPEN_ANNOUNCE_TO_DOOR_OPEN_MS);
         openDoors(() => {
           setTimeout(() => {
-            setMessage('つぎの ボタンを おしてね。');
+            if (mode === 'mission') {
+              if (isMissionSuccess) {
+                setMessage('つぎの ミッションに ちょうせんしよう。');
+              } else {
+                setMessage(`おだいは ${missionFloor}かい。いってみよう。`);
+              }
+            } else {
+              setMessage('つぎの ボタンを おしてね。');
+            }
           }, 500);
         });
       })();
 
-      if (mode === 'mission' && targetFloor === missionFloor) {
+      if (isMissionSuccess) {
         setMissionStreak((prev) => prev + 1);
         const nextFloor = randomMissionFloor(targetFloor);
         setMissionFloor(nextFloor);
-        setMessage('ミッションせいこう。つぎの かいへ いってみよう。');
+        setMessage(`ミッションせいこう！ つぎは ${nextFloor}かい。`);
       }
       return;
     }
@@ -466,10 +479,12 @@ function App(): React.JSX.Element {
           <Pressable
             style={styles.secondaryButton}
             onPress={() => {
+              const firstMission = randomMissionFloor(currentFloor);
               setMode('mission');
-              setMissionFloor(randomMissionFloor(currentFloor));
+              setMissionFloor(firstMission);
+              setMissionStreak(0);
               setScreen('play');
-              setMessage('ミッションモード。おだいの かいに いこう。');
+              setMessage(`ミッションモード。おだいは ${firstMission}かい！`);
             }}
           >
             <Text style={styles.secondaryButtonText}>ミッションモード</Text>
@@ -491,6 +506,13 @@ function App(): React.JSX.Element {
           <Text style={styles.character}>🐣</Text>
           <Text style={styles.message}>{message}</Text>
         </View>
+        {mode === 'mission' && (
+          <View style={styles.missionCard}>
+            <Text style={styles.missionTitle}>ミッション</Text>
+            <Text style={styles.missionMain}>おだい: {missionFloor}かい へ いこう</Text>
+            <Text style={styles.missionSub}>せいこう {missionStreak}かい</Text>
+          </View>
+        )}
 
         <View style={styles.elevatorSection}>
           <View style={styles.elevatorMachine}>
@@ -902,6 +924,32 @@ const styles = StyleSheet.create({
   },
   bottomActions: {
     marginBottom: 12,
+  },
+  missionCard: {
+    marginTop: -4,
+    borderRadius: 14,
+    borderWidth: 2,
+    borderColor: '#F2CF71',
+    backgroundColor: '#FFF8D9',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  missionTitle: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#805C13',
+  },
+  missionMain: {
+    marginTop: 2,
+    fontSize: 20,
+    fontWeight: '900',
+    color: '#5A4316',
+  },
+  missionSub: {
+    marginTop: 1,
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#7D6637',
   },
   adBanner: {
     position: 'absolute',
