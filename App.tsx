@@ -5,21 +5,13 @@ import {
   SafeAreaView,
   ScrollView,
   StyleSheet,
-  Switch,
   Text,
   View,
 } from 'react-native';
 import { Audio } from 'expo-av';
 
-type Screen = 'home' | 'play' | 'settings';
-type Mode = 'free' | 'mission';
 type DoorState = 'open' | 'closed';
-
-type Settings = {
-  voiceEnabled: boolean;
-  bgmVolume: number;
-  effectVolume: number;
-};
+type Direction = 'up' | 'down' | 'stop';
 
 type FloorShop = {
   icon: string;
@@ -81,7 +73,6 @@ const SOUND_FILES: Record<SoundKey, number> = {
   doorOpenVoice: require('./sounds/door-hirakimasu.mp3'),
   doorCloseVoice: require('./sounds/door-simarimasu.mp3'),
 };
-const VOICE_SOUND_KEYS: SoundKey[] = ['upVoice', 'downVoice', 'doorOpenVoice', 'doorCloseVoice'];
 const ANIMAL_GREETERS: AnimalGreeter[] = [
   { emoji: '🐶', name: 'わんちゃん', bg: '#FFE7CC' },
   { emoji: '🐱', name: 'ねこちゃん', bg: '#FFE2F2' },
@@ -106,15 +97,6 @@ const ANIMAL_GREETERS: AnimalGreeter[] = [
 ];
 const DEFAULT_GREETER: AnimalGreeter = { emoji: '🐶', name: 'わんちゃん', bg: '#FFE7CC' };
 
-function clamp(value: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, value));
-}
-
-function randomMissionFloor(currentFloor: number): number {
-  const available = FLOORS.filter((f) => f !== currentFloor);
-  return available[Math.floor(Math.random() * available.length)] ?? currentFloor;
-}
-
 function getFloorShop(floor: number): FloorShop {
   return FLOOR_SHOPS[floor] ?? DEFAULT_SHOP;
 }
@@ -124,33 +106,51 @@ function pickRandomGreeter(previous?: AnimalGreeter): AnimalGreeter {
   return candidates[Math.floor(Math.random() * candidates.length)] ?? DEFAULT_GREETER;
 }
 
-function App(): React.JSX.Element {
-  const [screen, setScreen] = useState<Screen>('home');
-  const [mode, setMode] = useState<Mode>('free');
+function getNextTargetFloor(currentFloor: number, pendingFloors: number[], direction: Direction): number | null {
+  if (pendingFloors.length === 0) return null;
+  if (pendingFloors.includes(currentFloor)) return currentFloor;
 
+  const above = pendingFloors.filter((floor) => floor > currentFloor).sort((a, b) => a - b);
+  const below = pendingFloors.filter((floor) => floor < currentFloor).sort((a, b) => b - a);
+  const nearestAbove = above[0];
+  const nearestBelow = below[0];
+
+  if (direction === 'up') {
+    if (nearestAbove !== undefined) return nearestAbove;
+    return nearestBelow ?? null;
+  }
+
+  if (direction === 'down') {
+    if (nearestBelow !== undefined) return nearestBelow;
+    return nearestAbove ?? null;
+  }
+
+  if (nearestAbove === undefined) return nearestBelow ?? null;
+  if (nearestBelow === undefined) return nearestAbove;
+
+  const upDelta = nearestAbove - currentFloor;
+  const downDelta = currentFloor - nearestBelow;
+  return upDelta <= downDelta ? nearestAbove : nearestBelow;
+}
+
+function App(): React.JSX.Element {
   const [currentFloor, setCurrentFloor] = useState<number>(1);
   const [queue, setQueue] = useState<number[]>([]);
   const [doorState, setDoorState] = useState<DoorState>('open');
   const [isDoorAnimating, setIsDoorAnimating] = useState<boolean>(false);
-  const [direction, setDirection] = useState<'up' | 'down' | 'stop'>('stop');
-
-  const [settings, setSettings] = useState<Settings>({
-    voiceEnabled: true,
-    bgmVolume: 0.4,
-    effectVolume: 0.7,
-  });
-
-  const [missionFloor, setMissionFloor] = useState<number>(randomMissionFloor(1));
-  const [missionStreak, setMissionStreak] = useState<number>(0);
-  const [message, setMessage] = useState<string>('きょうも あんぜん うんてん しようね。');
+  const [isServingStop, setIsServingStop] = useState<boolean>(false);
+  const [direction, setDirection] = useState<Direction>('stop');
+  const [message, setMessage] = useState<string>('じゆうモード。すきな かいを おしてみよう。');
   const [greeter, setGreeter] = useState<AnimalGreeter>(() => pickRandomGreeter());
 
   const leftDoorX = useRef(new Animated.Value(-DOOR_TRAVEL)).current;
   const rightDoorX = useRef(new Animated.Value(DOOR_TRAVEL)).current;
   const soundRefs = useRef<Partial<Record<SoundKey, Audio.Sound>>>({});
-  const directionRef = useRef<'up' | 'down' | 'stop'>('stop');
-
-  const targetFloor = queue[0] ?? null;
+  const lastMoveDirectionRef = useRef<Direction>('up');
+  const targetFloor = useMemo(() => {
+    const serviceDirection = direction === 'stop' ? lastMoveDirectionRef.current : direction;
+    return getNextTargetFloor(currentFloor, queue, serviceDirection);
+  }, [currentFloor, queue, direction]);
   const currentShop = getFloorShop(currentFloor);
 
   useEffect(() => {
@@ -166,7 +166,7 @@ function App(): React.JSX.Element {
         entries.map(async ([key, source]) => {
           const { sound } = await Audio.Sound.createAsync(source, {
             shouldPlay: false,
-            volume: settings.effectVolume,
+            volume: 0.7,
           });
           if (!mounted) {
             await sound.unloadAsync();
@@ -188,11 +188,10 @@ function App(): React.JSX.Element {
 
   useEffect(() => {
     const sounds = Object.values(soundRefs.current);
-    void Promise.all(sounds.map((sound) => sound?.setVolumeAsync(settings.effectVolume)));
-  }, [settings.effectVolume]);
+    void Promise.all(sounds.map((sound) => sound?.setVolumeAsync(0.7)));
+  }, []);
 
   const playSound = (key: SoundKey): void => {
-    if (VOICE_SOUND_KEYS.includes(key) && !settings.voiceEnabled) return;
     const sound = soundRefs.current[key];
     if (!sound) return;
 
@@ -219,7 +218,6 @@ function App(): React.JSX.Element {
   const openDoors = (callback?: () => void): void => {
     if (isDoorAnimating) return;
     setIsDoorAnimating(true);
-    setDoorState('open');
     playSound('doorMove');
     Animated.parallel([
       Animated.timing(leftDoorX, {
@@ -233,6 +231,7 @@ function App(): React.JSX.Element {
         useNativeDriver: true,
       }),
     ]).start(() => {
+      setDoorState('open');
       setIsDoorAnimating(false);
       callback?.();
     });
@@ -241,7 +240,6 @@ function App(): React.JSX.Element {
   const closeDoors = (callback?: () => void): void => {
     if (isDoorAnimating) return;
     setIsDoorAnimating(true);
-    setDoorState('closed');
     playSound('doorMove');
     Animated.parallel([
       Animated.timing(leftDoorX, {
@@ -255,15 +253,25 @@ function App(): React.JSX.Element {
         useNativeDriver: true,
       }),
     ]).start(() => {
+      setDoorState('closed');
       setIsDoorAnimating(false);
       callback?.();
     });
   };
 
   const enqueueFloor = (floor: number): void => {
-    if (floor === currentFloor || queue.includes(floor)) return;
+    if (floor === currentFloor) {
+      if (doorState === 'closed' && !isDoorAnimating) {
+        setGreeter((prev) => pickRandomGreeter(prev));
+        playSound('doorOpenVoice');
+        setTimeout(() => openDoors(), 180);
+      }
+      return;
+    }
+
+    if (queue.includes(floor)) return;
     setQueue((prev) => [...prev, floor]);
-    setMessage(`${floor}かい へ むかいます。`);
+    setMessage(`${floor}かいを とうろくしたよ。`);
     playSound('signal');
   };
 
@@ -281,11 +289,39 @@ function App(): React.JSX.Element {
   };
 
   useEffect(() => {
-    if (screen !== 'play') return;
+    if (isServingStop) return;
     if (isDoorAnimating) return;
     if (!targetFloor) {
       setDirection('stop');
-      directionRef.current = 'stop';
+      return;
+    }
+
+    if (currentFloor === targetFloor) {
+      setIsServingStop(true);
+      setQueue((prev) => prev.filter((floor) => floor !== targetFloor));
+      setDirection('stop');
+      setMessage(`${targetFloor}かいに とうちゃく。`);
+      playSound('signal2');
+
+      if (doorState === 'closed') {
+        void (async () => {
+          await delay(ARRIVAL_TO_OPEN_ANNOUNCE_MS);
+          setGreeter((prev) => pickRandomGreeter(prev));
+          playSound('doorOpenVoice');
+          await delay(OPEN_ANNOUNCE_TO_DOOR_OPEN_MS);
+          openDoors(() => {
+            setTimeout(() => {
+              setMessage('とびらが ひらきました。');
+              setIsServingStop(false);
+            }, 300);
+          });
+        })();
+      } else {
+        setTimeout(() => {
+          setMessage('とびらが ひらきました。');
+          setIsServingStop(false);
+        }, 300);
+      }
       return;
     }
 
@@ -296,69 +332,22 @@ function App(): React.JSX.Element {
       closeDoors(() => {
         setTimeout(() => {
           playSound(moveDirection === 'up' ? 'upVoice' : 'downVoice');
-          directionRef.current = moveDirection;
         }, DEPARTURE_ANNOUNCE_DELAY_MS);
       });
       return;
     }
 
-    if (currentFloor === targetFloor) {
-      const isMissionSuccess = mode === 'mission' && targetFloor === missionFloor;
-      setQueue((prev) => prev.slice(1));
-      setDirection('stop');
-      directionRef.current = 'stop';
-      if (isMissionSuccess) {
-        setMessage(`せいかい！ ${targetFloor}かいに とうちゃく。`);
-      } else {
-        setMessage(`${targetFloor}かいに とうちゃく。`);
-      }
-      playSound('signal2');
-      void (async () => {
-        await delay(ARRIVAL_TO_OPEN_ANNOUNCE_MS);
-        setGreeter((prev) => pickRandomGreeter(prev));
-        playSound('doorOpenVoice');
-        await delay(OPEN_ANNOUNCE_TO_DOOR_OPEN_MS);
-        openDoors(() => {
-          setTimeout(() => {
-            if (mode === 'mission') {
-              if (isMissionSuccess) {
-                setMessage('つぎの ミッションに ちょうせんしよう。');
-              } else {
-                setMessage(`おだいは ${missionFloor}かい。いってみよう。`);
-              }
-            } else {
-              setMessage('つぎの ボタンを おしてね。');
-            }
-          }, 500);
-        });
-      })();
-
-      if (isMissionSuccess) {
-        setMissionStreak((prev) => prev + 1);
-        const nextFloor = randomMissionFloor(targetFloor);
-        setMissionFloor(nextFloor);
-        setMessage(`ミッションせいこう！ つぎは ${nextFloor}かい。`);
-      }
-      return;
-    }
-
     const moveDirection = currentFloor < targetFloor ? 'up' : 'down';
     setDirection(moveDirection);
+    lastMoveDirectionRef.current = moveDirection;
     playSound('moveMotor');
-    directionRef.current = moveDirection;
 
     const timer = setTimeout(() => {
       setCurrentFloor((prev) => prev + (moveDirection === 'up' ? 1 : -1));
     }, FLOOR_TRAVEL_MS);
 
     return () => clearTimeout(timer);
-  }, [currentFloor, doorState, isDoorAnimating, mode, missionFloor, screen, targetFloor]);
-
-  useEffect(() => {
-    if (screen === 'home') {
-      setMessage('モードを えらんで スタート しよう。');
-    }
-  }, [screen]);
+  }, [currentFloor, doorState, isDoorAnimating, isServingStop, targetFloor]);
 
   const panelFloorButtons = useMemo(
     () =>
@@ -381,122 +370,8 @@ function App(): React.JSX.Element {
   const header = (
     <View style={styles.headerRow}>
       <Text style={styles.title}>こどもエレベーターたいけん</Text>
-      <Pressable style={styles.headerButton} onPress={() => setScreen('settings')}>
-        <Text style={styles.headerButtonText}>ほごしゃ せってい</Text>
-      </Pressable>
     </View>
   );
-
-  if (screen === 'settings') {
-    return (
-      <SafeAreaView style={styles.safeArea}>
-        {header}
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>ほごしゃ せってい</Text>
-
-          <View style={styles.settingRow}>
-            <Text style={styles.settingLabel}>おんせいガイド</Text>
-            <Switch
-              value={settings.voiceEnabled}
-              onValueChange={(value) => setSettings((prev) => ({ ...prev, voiceEnabled: value }))}
-            />
-          </View>
-
-          <View style={styles.settingRowColumn}>
-            <Text style={styles.settingLabel}>BGM おんりょう: {Math.round(settings.bgmVolume * 100)}%</Text>
-            <View style={styles.inlineButtons}>
-              <Pressable
-                style={styles.miniButton}
-                onPress={() =>
-                  setSettings((prev) => ({ ...prev, bgmVolume: clamp(prev.bgmVolume - 0.1, 0, 1) }))
-                }
-              >
-                <Text style={styles.miniButtonText}>-</Text>
-              </Pressable>
-              <Pressable
-                style={styles.miniButton}
-                onPress={() =>
-                  setSettings((prev) => ({ ...prev, bgmVolume: clamp(prev.bgmVolume + 0.1, 0, 1) }))
-                }
-              >
-                <Text style={styles.miniButtonText}>+</Text>
-              </Pressable>
-            </View>
-          </View>
-
-          <View style={styles.settingRowColumn}>
-            <Text style={styles.settingLabel}>こうかおん おんりょう: {Math.round(settings.effectVolume * 100)}%</Text>
-            <View style={styles.inlineButtons}>
-              <Pressable
-                style={styles.miniButton}
-                onPress={() =>
-                  setSettings((prev) => ({ ...prev, effectVolume: clamp(prev.effectVolume - 0.1, 0, 1) }))
-                }
-              >
-                <Text style={styles.miniButtonText}>-</Text>
-              </Pressable>
-              <Pressable
-                style={styles.miniButton}
-                onPress={() =>
-                  setSettings((prev) => ({ ...prev, effectVolume: clamp(prev.effectVolume + 0.1, 0, 1) }))
-                }
-              >
-                <Text style={styles.miniButtonText}>+</Text>
-              </Pressable>
-            </View>
-          </View>
-
-          <Pressable style={styles.primaryButton} onPress={() => setScreen('home')}>
-            <Text style={styles.primaryButtonText}>もどる</Text>
-          </Pressable>
-        </View>
-      </SafeAreaView>
-    );
-  }
-
-  if (screen === 'home') {
-    return (
-      <SafeAreaView style={styles.safeArea}>
-        {header}
-        <View style={styles.characterBubble}>
-          <Text style={styles.character}>🐣</Text>
-          <Text style={styles.message}>{message}</Text>
-        </View>
-
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>モードを えらんでね</Text>
-          <Pressable
-            style={styles.primaryButton}
-            onPress={() => {
-              setMode('free');
-              setScreen('play');
-              setMessage('じゆうモード。すきな かいを おしてみよう。');
-            }}
-          >
-            <Text style={styles.primaryButtonText}>じゆうモード</Text>
-          </Pressable>
-
-          <Pressable
-            style={styles.secondaryButton}
-            onPress={() => {
-              const firstMission = randomMissionFloor(currentFloor);
-              setMode('mission');
-              setMissionFloor(firstMission);
-              setMissionStreak(0);
-              setScreen('play');
-              setMessage(`ミッションモード。おだいは ${firstMission}かい！`);
-            }}
-          >
-            <Text style={styles.secondaryButtonText}>ミッションモード</Text>
-          </Pressable>
-        </View>
-
-        <View style={styles.adBanner}>
-          <Text style={styles.adText}>広告エリア（AdMobバナー差し替え予定）</Text>
-        </View>
-      </SafeAreaView>
-    );
-  }
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -506,13 +381,6 @@ function App(): React.JSX.Element {
           <Text style={styles.character}>🐣</Text>
           <Text style={styles.message}>{message}</Text>
         </View>
-        {mode === 'mission' && (
-          <View style={styles.missionCard}>
-            <Text style={styles.missionTitle}>ミッション</Text>
-            <Text style={styles.missionMain}>おだい: {missionFloor}かい へ いこう</Text>
-            <Text style={styles.missionSub}>せいこう {missionStreak}かい</Text>
-          </View>
-        )}
 
         <View style={styles.elevatorSection}>
           <View style={styles.elevatorMachine}>
@@ -568,10 +436,10 @@ function App(): React.JSX.Element {
             style={styles.secondaryButton}
             onPress={() => {
               setQueue([]);
-              setScreen('home');
+              setMessage('じゆうモード。すきな かいを おしてみよう。');
             }}
           >
-            <Text style={styles.secondaryButtonText}>モードせんたくへ</Text>
+            <Text style={styles.secondaryButtonText}>キューをリセット</Text>
           </Pressable>
         </View>
       </ScrollView>
@@ -591,26 +459,12 @@ const styles = StyleSheet.create({
   headerRow: {
     paddingHorizontal: 16,
     paddingVertical: 12,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
   },
   title: {
     fontSize: 17,
     fontWeight: '700',
     color: '#4B3F2A',
-    maxWidth: '62%',
-  },
-  headerButton: {
-    backgroundColor: '#F2D79E',
-    borderRadius: 12,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-  },
-  headerButtonText: {
-    color: '#523F16',
-    fontWeight: '700',
-    fontSize: 12,
   },
   characterBubble: {
     marginHorizontal: 16,
@@ -634,31 +488,6 @@ const styles = StyleSheet.create({
     lineHeight: 21,
     fontWeight: '600',
   },
-  card: {
-    marginHorizontal: 16,
-    borderRadius: 18,
-    backgroundColor: '#FFFFFF',
-    padding: 18,
-    borderWidth: 2,
-    borderColor: '#F3E2B7',
-    gap: 12,
-  },
-  cardTitle: {
-    fontSize: 20,
-    fontWeight: '800',
-    color: '#3E341E',
-  },
-  primaryButton: {
-    backgroundColor: '#45B58D',
-    paddingVertical: 14,
-    borderRadius: 14,
-    alignItems: 'center',
-  },
-  primaryButtonText: {
-    color: '#FFFFFF',
-    fontWeight: '800',
-    fontSize: 18,
-  },
   secondaryButton: {
     backgroundColor: '#5BA7E9',
     paddingVertical: 14,
@@ -669,36 +498,6 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontWeight: '800',
     fontSize: 18,
-  },
-  settingRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  settingRowColumn: {
-    gap: 8,
-  },
-  settingLabel: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#3E341E',
-  },
-  inlineButtons: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  miniButton: {
-    width: 42,
-    height: 42,
-    borderRadius: 12,
-    backgroundColor: '#EFE6D0',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  miniButtonText: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: '#4A3E23',
   },
   playContent: {
     flexGrow: 1,
@@ -924,32 +723,6 @@ const styles = StyleSheet.create({
   },
   bottomActions: {
     marginBottom: 12,
-  },
-  missionCard: {
-    marginTop: -4,
-    borderRadius: 14,
-    borderWidth: 2,
-    borderColor: '#F2CF71',
-    backgroundColor: '#FFF8D9',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-  },
-  missionTitle: {
-    fontSize: 13,
-    fontWeight: '800',
-    color: '#805C13',
-  },
-  missionMain: {
-    marginTop: 2,
-    fontSize: 20,
-    fontWeight: '900',
-    color: '#5A4316',
-  },
-  missionSub: {
-    marginTop: 1,
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#7D6637',
   },
   adBanner: {
     position: 'absolute',
