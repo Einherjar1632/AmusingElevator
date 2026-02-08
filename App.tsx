@@ -27,6 +27,11 @@ type FloorShop = {
   subtitle: string;
   color: string;
 };
+type AnimalGreeter = {
+  emoji: string;
+  name: string;
+  bg: string;
+};
 type SoundKey =
   | 'signal'
   | 'signal2'
@@ -77,6 +82,29 @@ const SOUND_FILES: Record<SoundKey, number> = {
   doorCloseVoice: require('./sounds/door-simarimasu.mp3'),
 };
 const VOICE_SOUND_KEYS: SoundKey[] = ['upVoice', 'downVoice', 'doorOpenVoice', 'doorCloseVoice'];
+const ANIMAL_GREETERS: AnimalGreeter[] = [
+  { emoji: '🐶', name: 'わんちゃん', bg: '#FFE7CC' },
+  { emoji: '🐱', name: 'ねこちゃん', bg: '#FFE2F2' },
+  { emoji: '🐰', name: 'うさぎさん', bg: '#F1E6FF' },
+  { emoji: '🐻', name: 'くまさん', bg: '#FFEBD6' },
+  { emoji: '🦁', name: 'らいおんくん', bg: '#FFF0CC' },
+  { emoji: '🐼', name: 'ぱんだちゃん', bg: '#EDF2F8' },
+  { emoji: '🐨', name: 'こあらさん', bg: '#E7F3FF' },
+  { emoji: '🐸', name: 'かえるくん', bg: '#E6FFE6' },
+  { emoji: '🐧', name: 'ぺんぎんさん', bg: '#E6F3FF' },
+  { emoji: '🦊', name: 'きつねさん', bg: '#FFE9DB' },
+  { emoji: '🐹', name: 'はむちゃん', bg: '#FFF1DA' },
+  { emoji: '🐯', name: 'とらくん', bg: '#FFE7D1' },
+  { emoji: '🦄', name: 'ゆにこーん', bg: '#F6E8FF' },
+  { emoji: '🦉', name: 'ふくろうさん', bg: '#ECEFF7' },
+  { emoji: '🐥', name: 'ひよこちゃん', bg: '#FFF6CC' },
+  { emoji: '🐮', name: 'うしさん', bg: '#F3F1ED' },
+  { emoji: '🐷', name: 'ぶたさん', bg: '#FFE4EE' },
+  { emoji: '🐵', name: 'おさるさん', bg: '#FCE8D6' },
+  { emoji: '🐙', name: 'たこさん', bg: '#FFE6E6' },
+  { emoji: '🦕', name: 'きょうりゅうくん', bg: '#E7F7EA' },
+];
+const DEFAULT_GREETER: AnimalGreeter = { emoji: '🐶', name: 'わんちゃん', bg: '#FFE7CC' };
 
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
@@ -89,6 +117,11 @@ function randomMissionFloor(currentFloor: number): number {
 
 function getFloorShop(floor: number): FloorShop {
   return FLOOR_SHOPS[floor] ?? DEFAULT_SHOP;
+}
+
+function pickRandomGreeter(previous?: AnimalGreeter): AnimalGreeter {
+  const candidates = ANIMAL_GREETERS.filter((animal) => animal.name !== previous?.name);
+  return candidates[Math.floor(Math.random() * candidates.length)] ?? DEFAULT_GREETER;
 }
 
 function App(): React.JSX.Element {
@@ -110,6 +143,7 @@ function App(): React.JSX.Element {
   const [missionFloor, setMissionFloor] = useState<number>(randomMissionFloor(1));
   const [missionStreak, setMissionStreak] = useState<number>(0);
   const [message, setMessage] = useState<string>('きょうも あんぜん うんてん しようね。');
+  const [greeter, setGreeter] = useState<AnimalGreeter>(() => pickRandomGreeter());
 
   const leftDoorX = useRef(new Animated.Value(-DOOR_TRAVEL)).current;
   const rightDoorX = useRef(new Animated.Value(DOOR_TRAVEL)).current;
@@ -235,6 +269,7 @@ function App(): React.JSX.Element {
 
   const handleManualOpen = (): void => {
     if (isDoorAnimating || doorState === 'open') return;
+    setGreeter((prev) => pickRandomGreeter(prev));
     playSound('doorOpenVoice');
     setTimeout(() => openDoors(), 180);
   };
@@ -275,6 +310,7 @@ function App(): React.JSX.Element {
       playSound('signal2');
       void (async () => {
         await delay(ARRIVAL_TO_OPEN_ANNOUNCE_MS);
+        setGreeter((prev) => pickRandomGreeter(prev));
         playSound('doorOpenVoice');
         await delay(OPEN_ANNOUNCE_TO_DOOR_OPEN_MS);
         openDoors(() => {
@@ -471,6 +507,12 @@ function App(): React.JSX.Element {
                   <View style={styles.rearWall} />
                   <View style={[styles.innerHall, { backgroundColor: currentShop.color }]}>
                     <Text style={styles.innerFloorBadge}>{currentFloor}かい</Text>
+                    {doorState === 'open' && (
+                      <View style={[styles.greeterCard, { backgroundColor: greeter.bg }]}>
+                        <Text style={styles.greeterEmoji}>{greeter.emoji}</Text>
+                        <Text style={styles.greeterText}>{greeter.name}が おでむかえ！</Text>
+                      </View>
+                    )}
                   </View>
                   <Animated.View style={[styles.door, styles.leftDoor, { transform: [{ translateX: leftDoorX }] }]}>
                     <View style={styles.doorHandle} />
@@ -722,19 +764,42 @@ const styles = StyleSheet.create({
   innerHall: {
     position: 'absolute',
     top: 20,
-    left: 18,
-    right: 18,
+    left: '50%',
+    marginLeft: -52,
+    width: 104,
     alignItems: 'center',
     backgroundColor: 'rgba(245, 250, 255, 0.85)',
     borderRadius: 10,
-    paddingVertical: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 6,
     borderWidth: 1,
     borderColor: '#D3DEE8',
+    overflow: 'hidden',
   },
   innerFloorBadge: {
-    fontSize: 30,
+    fontSize: 24,
     fontWeight: '900',
     color: '#2E3642',
+  },
+  greeterCard: {
+    marginTop: 8,
+    width: '100%',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#D6DCE5',
+    alignItems: 'center',
+    paddingVertical: 6,
+    paddingHorizontal: 4,
+  },
+  greeterEmoji: {
+    fontSize: 38,
+  },
+  greeterText: {
+    marginTop: 2,
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#334258',
+    textAlign: 'center',
   },
   door: {
     position: 'absolute',
