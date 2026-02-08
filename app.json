@@ -1,0 +1,20 @@
+{
+  "expo": {
+    "name": "こどもエレベーターたいけん",
+    "slug": "amusing-elevator",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "resizeMode": "contain",
+      "backgroundColor": "#FFF4D0"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.einherjar.amusingelevator"
+    }
+  }
+}
