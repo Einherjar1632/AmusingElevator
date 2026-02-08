@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Animated,
+  Linking,
   Pressable,
   SafeAreaView,
   ScrollView,
@@ -136,6 +137,7 @@ function getNextTargetFloor(currentFloor: number, pendingFloors: number[], direc
 }
 
 function App(): React.JSX.Element {
+  const [showCredits, setShowCredits] = useState<boolean>(false);
   const [currentFloor, setCurrentFloor] = useState<number>(1);
   const [queue, setQueue] = useState<number[]>([]);
   const [doorState, setDoorState] = useState<DoorState>('closed');
@@ -402,8 +404,49 @@ function App(): React.JSX.Element {
   const header = (
     <View style={styles.headerRow}>
       <Text style={styles.title}>こどもエレベーターたいけん</Text>
+      <Pressable style={styles.headerButton} onPress={() => setShowCredits(true)}>
+        <Text style={styles.headerButtonText}>クレジット</Text>
+      </Pressable>
     </View>
   );
+
+  if (showCredits) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <View style={styles.headerRow}>
+          <Text style={styles.title}>クレジット</Text>
+          <Pressable style={styles.headerButton} onPress={() => setShowCredits(false)}>
+            <Text style={styles.headerButtonText}>もどる</Text>
+          </Pressable>
+        </View>
+
+        <ScrollView contentContainerStyle={styles.creditsContent}>
+          <View style={styles.creditsCard}>
+            <Text style={styles.creditsTitle}>音源</Text>
+            <Text style={styles.creditsText}>効果音の一部は「ポケットサウンド」様の音源を使用しています。</Text>
+            <Pressable onPress={() => void Linking.openURL('https://pocket-se.info/')}>
+              <Text style={styles.creditsLink}>https://pocket-se.info/</Text>
+            </Pressable>
+          </View>
+
+          <View style={styles.creditsCard}>
+            <Text style={styles.creditsTitle}>利用技術</Text>
+            <Text style={styles.creditsText}>React Native</Text>
+            <Text style={styles.creditsText}>Expo</Text>
+            <Text style={styles.creditsText}>react / react-native</Text>
+            <Text style={styles.creditsText}>expo-av / expo-asset / expo-speech</Text>
+            <Text style={styles.creditsText}>TypeScript</Text>
+          </View>
+
+          <View style={styles.creditsCard}>
+            <Text style={styles.creditsTitle}>このアプリについて</Text>
+            <Text style={styles.creditsText}>AmusingElevator</Text>
+            <Text style={styles.creditsText}>こども向けエレベーターたいけんアプリ</Text>
+          </View>
+        </ScrollView>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -474,7 +517,7 @@ function App(): React.JSX.Element {
             style={({ pressed }) => [styles.secondaryButton, pressed && styles.secondaryButtonPressed]}
             onPress={() => {
               setQueue([]);
-              setMessage('じゆうモード。すきな かいを おしてみよう。');
+              setMessage('すきな かいを おしてみよう。');
             }}
           >
             <Text style={styles.secondaryButtonText}>いきさきを けす</Text>
@@ -498,11 +541,24 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
     alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
   },
   title: {
     fontSize: 17,
     fontWeight: '700',
     color: '#4B3F2A',
+  },
+  headerButton: {
+    backgroundColor: '#F2D79E',
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  headerButtonText: {
+    color: '#523F16',
+    fontWeight: '700',
+    fontSize: 12,
   },
   characterBubble: {
     marginHorizontal: 16,
@@ -785,6 +841,38 @@ const styles = StyleSheet.create({
   },
   bottomActions: {
     marginBottom: 12,
+  },
+  creditsContent: {
+    paddingHorizontal: 16,
+    paddingBottom: 96,
+    gap: 12,
+  },
+  creditsCard: {
+    borderRadius: 14,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 2,
+    borderColor: '#F3E2B7',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    gap: 6,
+  },
+  creditsTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#3E341E',
+  },
+  creditsText: {
+    fontSize: 14,
+    color: '#393223',
+    lineHeight: 20,
+    fontWeight: '600',
+  },
+  creditsLink: {
+    marginTop: 2,
+    fontSize: 14,
+    color: '#2C6FD2',
+    fontWeight: '700',
+    textDecorationLine: 'underline',
   },
   adBanner: {
     position: 'absolute',
