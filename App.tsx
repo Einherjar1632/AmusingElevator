@@ -471,7 +471,7 @@ function App(): React.JSX.Element {
 
         <View style={styles.bottomActions}>
           <Pressable
-            style={styles.secondaryButton}
+            style={({ pressed }) => [styles.secondaryButton, pressed && styles.secondaryButtonPressed]}
             onPress={() => {
               setQueue([]);
               setMessage('じゆうモード。すきな かいを おしてみよう。');
@@ -531,6 +531,11 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     borderRadius: 14,
     alignItems: 'center',
+  },
+  secondaryButtonPressed: {
+    opacity: 0.88,
+    transform: [{ scale: 0.97 }],
+    backgroundColor: '#4A96D6',
   },
   secondaryButtonText: {
     color: '#FFFFFF',
