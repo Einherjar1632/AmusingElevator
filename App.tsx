@@ -405,12 +405,12 @@ function App(): React.JSX.Element {
                     )}
                   </View>
                   <Animated.View style={[styles.door, styles.leftDoor, { transform: [{ translateX: leftDoorX }] }]}>
-                    <View style={styles.doorHandle} />
-                    <View style={styles.doorGloss} />
+                    <View style={[styles.doorHandle, styles.leftDoorHandle]} />
+                    <View style={[styles.doorGloss, styles.leftDoorGloss]} />
                   </Animated.View>
                   <Animated.View style={[styles.door, styles.rightDoor, { transform: [{ translateX: rightDoorX }] }]}>
-                    <View style={styles.doorHandle} />
-                    <View style={styles.doorGloss} />
+                    <View style={[styles.doorHandle, styles.rightDoorHandle]} />
+                    <View style={[styles.doorGloss, styles.rightDoorGloss]} />
                   </Animated.View>
                 </View>
               </View>
@@ -418,10 +418,16 @@ function App(): React.JSX.Element {
               <View style={styles.controlPanel}>
                 <Text style={styles.panelDisplay}>そうさパネル</Text>
                 <View style={styles.panelUtilityRow}>
-                  <Pressable style={styles.panelUtilityButton} onPress={handleManualOpen}>
+                  <Pressable
+                    onPress={handleManualOpen}
+                    style={({ pressed }) => [styles.panelUtilityButton, pressed && styles.panelUtilityButtonPressed]}
+                  >
                     <Text style={styles.panelUtilityButtonText}>開</Text>
                   </Pressable>
-                  <Pressable style={styles.panelUtilityButton} onPress={handleManualClose}>
+                  <Pressable
+                    onPress={handleManualClose}
+                    style={({ pressed }) => [styles.panelUtilityButton, pressed && styles.panelUtilityButtonPressed]}
+                  >
                     <Text style={styles.panelUtilityButtonText}>閉</Text>
                   </Pressable>
                 </View>
@@ -439,7 +445,7 @@ function App(): React.JSX.Element {
               setMessage('じゆうモード。すきな かいを おしてみよう。');
             }}
           >
-            <Text style={styles.secondaryButtonText}>キューをリセット</Text>
+            <Text style={styles.secondaryButtonText}>いきさきを けす</Text>
           </Pressable>
         </View>
       </ScrollView>
@@ -640,18 +646,32 @@ const styles = StyleSheet.create({
     right: 0,
   },
   doorHandle: {
+    position: 'absolute',
+    top: '50%',
+    marginTop: -25,
     width: 6,
     height: 50,
     borderRadius: 3,
     backgroundColor: '#DDE4EB',
   },
+  leftDoorHandle: {
+    right: 10,
+  },
+  rightDoorHandle: {
+    left: 10,
+  },
   doorGloss: {
     position: 'absolute',
     top: 0,
     bottom: 0,
-    left: 12,
     width: 16,
     backgroundColor: 'rgba(255,255,255,0.12)',
+  },
+  leftDoorGloss: {
+    left: 12,
+  },
+  rightDoorGloss: {
+    right: 12,
   },
   controlPanel: {
     width: 126,
@@ -687,6 +707,11 @@ const styles = StyleSheet.create({
     backgroundColor: '#8892A3',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  panelUtilityButtonPressed: {
+    opacity: 0.85,
+    transform: [{ scale: 0.95 }],
+    backgroundColor: '#748195',
   },
   panelUtilityButtonText: {
     fontSize: 18,
