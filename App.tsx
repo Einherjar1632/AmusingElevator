@@ -403,7 +403,7 @@ function App(): React.JSX.Element {
 
   const header = (
     <View style={styles.headerRow}>
-      <Text style={styles.title}>こどもエレベーターたいけん</Text>
+      <Text style={styles.title}>エレベーターたいけん</Text>
       <Pressable style={styles.headerButton} onPress={() => setShowCredits(true)}>
         <Text style={styles.headerButtonText}>クレジット</Text>
       </Pressable>
