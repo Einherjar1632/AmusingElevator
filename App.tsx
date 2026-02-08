@@ -5,6 +5,7 @@ import {
   SafeAreaView,
   ScrollView,
   StyleSheet,
+  LogBox,
   Text,
   View,
 } from 'react-native';
@@ -62,6 +63,7 @@ const DOOR_ANIMATION_MS = 900;
 const FLOOR_TRAVEL_MS = 900;
 const ARRIVAL_TO_OPEN_ANNOUNCE_MS = 900;
 const OPEN_ANNOUNCE_TO_DOOR_OPEN_MS = 400;
+const DOOR_DWELL_MS = 1800;
 const DEPARTURE_ANNOUNCE_DELAY_MS = 700;
 const SOUND_FILES: Record<SoundKey, number> = {
   signal: require('./sounds/elevetor-signal.mp3'),
@@ -136,15 +138,16 @@ function getNextTargetFloor(currentFloor: number, pendingFloors: number[], direc
 function App(): React.JSX.Element {
   const [currentFloor, setCurrentFloor] = useState<number>(1);
   const [queue, setQueue] = useState<number[]>([]);
-  const [doorState, setDoorState] = useState<DoorState>('open');
+  const [doorState, setDoorState] = useState<DoorState>('closed');
   const [isDoorAnimating, setIsDoorAnimating] = useState<boolean>(false);
   const [isServingStop, setIsServingStop] = useState<boolean>(false);
+  const [shouldAutoCloseAfterStop, setShouldAutoCloseAfterStop] = useState<boolean>(false);
   const [direction, setDirection] = useState<Direction>('stop');
   const [message, setMessage] = useState<string>('じゆうモード。すきな かいを おしてみよう。');
   const [greeter, setGreeter] = useState<AnimalGreeter>(() => pickRandomGreeter());
 
-  const leftDoorX = useRef(new Animated.Value(-DOOR_TRAVEL)).current;
-  const rightDoorX = useRef(new Animated.Value(DOOR_TRAVEL)).current;
+  const leftDoorX = useRef(new Animated.Value(0)).current;
+  const rightDoorX = useRef(new Animated.Value(0)).current;
   const soundRefs = useRef<Partial<Record<SoundKey, Audio.Sound>>>({});
   const lastMoveDirectionRef = useRef<Direction>('up');
   const targetFloor = useMemo(() => {
@@ -152,6 +155,10 @@ function App(): React.JSX.Element {
     return getNextTargetFloor(currentFloor, queue, serviceDirection);
   }, [currentFloor, queue, direction]);
   const currentShop = getFloorShop(currentFloor);
+
+  useEffect(() => {
+    LogBox.ignoreLogs([/Open debugger to view warnings/i, /Open Debugger to view warnings/i]);
+  }, []);
 
   useEffect(() => {
     let mounted = true;
@@ -284,6 +291,7 @@ function App(): React.JSX.Element {
 
   const handleManualClose = (): void => {
     if (isDoorAnimating || doorState === 'closed') return;
+    setShouldAutoCloseAfterStop(false);
     playSound('doorCloseVoice');
     setTimeout(() => closeDoors(), 180);
   };
@@ -312,6 +320,7 @@ function App(): React.JSX.Element {
           openDoors(() => {
             setTimeout(() => {
               setMessage('とびらが ひらきました。');
+              setShouldAutoCloseAfterStop(true);
               setIsServingStop(false);
             }, 300);
           });
@@ -319,6 +328,7 @@ function App(): React.JSX.Element {
       } else {
         setTimeout(() => {
           setMessage('とびらが ひらきました。');
+          setShouldAutoCloseAfterStop(true);
           setIsServingStop(false);
         }, 300);
       }
@@ -328,13 +338,15 @@ function App(): React.JSX.Element {
     if (doorState === 'open') {
       setMessage('しゅっぱつするので とびらを しめます。');
       const moveDirection = currentFloor < targetFloor ? 'up' : 'down';
-      playSound('doorCloseVoice');
-      closeDoors(() => {
-        setTimeout(() => {
-          playSound(moveDirection === 'up' ? 'upVoice' : 'downVoice');
-        }, DEPARTURE_ANNOUNCE_DELAY_MS);
-      });
-      return;
+      const timer = setTimeout(() => {
+        playSound('doorCloseVoice');
+        closeDoors(() => {
+          setTimeout(() => {
+            playSound(moveDirection === 'up' ? 'upVoice' : 'downVoice');
+          }, DEPARTURE_ANNOUNCE_DELAY_MS);
+        });
+      }, DOOR_DWELL_MS);
+      return () => clearTimeout(timer);
     }
 
     const moveDirection = currentFloor < targetFloor ? 'up' : 'down';
@@ -348,6 +360,26 @@ function App(): React.JSX.Element {
 
     return () => clearTimeout(timer);
   }, [currentFloor, doorState, isDoorAnimating, isServingStop, targetFloor]);
+
+  useEffect(() => {
+    if (!shouldAutoCloseAfterStop) return;
+    if (isDoorAnimating || isServingStop) return;
+    if (doorState !== 'open') return;
+
+    if (targetFloor !== null) {
+      setShouldAutoCloseAfterStop(false);
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      playSound('doorCloseVoice');
+      closeDoors(() => {
+        setShouldAutoCloseAfterStop(false);
+      });
+    }, DOOR_DWELL_MS);
+
+    return () => clearTimeout(timer);
+  }, [closeDoors, doorState, isDoorAnimating, isServingStop, shouldAutoCloseAfterStop, targetFloor]);
 
   const panelFloorButtons = useMemo(
     () =>
